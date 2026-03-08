@@ -80,6 +80,7 @@ class GameEngine:
         self.world: dict[str, Any] = {}
         self.adventure: LoadedAdventure | None = None
         self.state = GameState()
+        self.app_version = ""
 
     def list_adventures(self) -> list[dict[str, Any]]:
         adventures: list[dict[str, Any]] = []
@@ -157,9 +158,11 @@ class GameEngine:
             "move": self._cmd_move,
             "journal": self._cmd_journal,
             "notes": self._cmd_journal,
+            "mailbox": self._cmd_mailbox,
             "stats": self._cmd_stats,
             "check": self._cmd_check,
             "calendar": self._cmd_calendar,
+            "version": self._cmd_version,
             "name": self._cmd_name,
             "settings": self._cmd_settings,
         }
@@ -168,7 +171,10 @@ class GameEngine:
             message = f"Unknown command '{action}'. Try: help"
             self._log_missing_action(raw, reason="unknown_command")
             return message
-        response = handler(args)
+        try:
+            response = handler(args)
+        except (ValidationError, EngineError, FileNotFoundError) as exc:
+            return str(exc) or "Command failed."
         if response.startswith("No outcome configured for action:"):
             self._log_missing_action(raw, reason="no_outcome_configured")
         return response
@@ -242,6 +248,7 @@ class GameEngine:
             "\n=== Player ===\n"
             "- inventory\n"
             "- journal [list|read <page>|remove <page>|add <note text>]\n"
+            "- mailbox read|sendto <playername|global> <message>|hide <#-#>|reveal <#-#>\n"
             "- calendar [month|week|day] [weather|journal]\n"
             "- stats [npc <npc_id>]\n"
             "- check <intelligence|vibes|physique|luck> [description]\n"
@@ -253,9 +260,7 @@ class GameEngine:
             "- settings [autosave on|off]\n"
             "- settings autosave-notify on|off\n"
             "- settings calendar\n"
-            "- settings calendar timezone <iana_tz>\n"
-            "- settings calendar seed <int|randomize>\n"
-            "- settings calendar timetravel <YYYY-MM-DD|clear>\n"
+            "- version\n"
             "- help"
         )
 
@@ -504,6 +509,9 @@ class GameEngine:
         if not args:
             return "Usage: load <slot>"
         slot = args[0]
+        slots = self.saves.list_slots(self.state.creator, self.state.adventure_id)
+        if slot not in slots:
+            return f"Save slot '{slot}' not found for this adventure."
         return self.load(self.state.creator, self.state.adventure_id, slot)
 
     def _cmd_saves(self, _: list[str]) -> str:
@@ -636,6 +644,90 @@ class GameEngine:
 
         return "Unknown journal command. Use: journal [list|read <page>|remove <page>|add <note text>]"
 
+    def _cmd_mailbox(self, args: list[str]) -> str:
+        if not args:
+            return (
+                "Usage: mailbox read | mailbox sendto <playername|global> <message> | "
+                "mailbox hide <#-#> | mailbox reveal <#-#>"
+            )
+        action = args[0].lower()
+        hidden_ids = self.state.flags.setdefault("mailbox_hidden_ids", [])
+        if not isinstance(hidden_ids, list):
+            hidden_ids = []
+            self.state.flags["mailbox_hidden_ids"] = hidden_ids
+        hidden_set = {int(x) for x in hidden_ids if str(x).isdigit()}
+
+        if action == "read":
+            player_name = self._player_name().strip().lower()
+            messages = self.saves.read_global_mailbox()
+            visible: list[dict[str, Any]] = []
+            for message in messages:
+                message_id = int(message.get("id", 0))
+                recipient = str(message.get("recipient", "")).strip()
+                recipient_key = recipient.lower()
+                sender = str(message.get("sender", "")).strip().lower()
+                sender_is_current = sender == player_name
+                is_for_player = recipient_key in {"global", player_name}
+                if not sender_is_current and not is_for_player:
+                    continue
+                if message_id in hidden_set:
+                    continue
+                visible.append(message)
+
+            if not visible:
+                return "Mailbox is empty."
+
+            lines = [f"Mailbox for {self._player_name()}:"]
+            for message in visible:
+                message_id = int(message.get("id", 0))
+                sender = str(message.get("sender", "Unknown"))
+                recipient = str(message.get("recipient", "global"))
+                text = str(message.get("text", "")).strip()
+                sender_is_current = sender.strip().lower() == self._player_name().strip().lower()
+                if sender_is_current:
+                    lines.append(
+                        f"[pink]> #{message_id} [{recipient}] from {sender}: {text}[/pink]"
+                    )
+                else:
+                    tag = "blue" if recipient.lower() == "global" else "green"
+                    lines.append(
+                        f"[{tag}]#{message_id} [{recipient}] from {sender}: {text}[/{tag}]"
+                    )
+            return "\n".join(lines)
+
+        if action == "sendto":
+            if len(args) < 3:
+                return "Usage: mailbox sendto <playername|global> <message>"
+            recipient = args[1].strip()
+            if not recipient:
+                return "Usage: mailbox sendto <playername|global> <message>"
+            text = " ".join(args[2:]).strip()
+            if not text:
+                return "Usage: mailbox sendto <playername|global> <message>"
+            recipient_value = "global" if recipient.lower() == "global" else recipient
+            message_id = self.saves.append_global_mailbox_message(
+                sender=self._player_name(),
+                recipient=recipient_value,
+                text=text,
+            )
+            return f"Mailbox message #{message_id} sent to {recipient_value}."
+
+        if action in {"hide", "reveal"}:
+            if len(args) != 2:
+                return f"Usage: mailbox {action} <#-#>"
+            id_values = self._parse_message_id_range(args[1])
+            if not id_values:
+                return f"Usage: mailbox {action} <#-#>"
+            if action == "hide":
+                hidden_set.update(id_values)
+                self.state.flags["mailbox_hidden_ids"] = sorted(hidden_set)
+                return f"Hid mailbox messages: {', '.join(str(v) for v in sorted(id_values))}"
+            hidden_set.difference_update(id_values)
+            self.state.flags["mailbox_hidden_ids"] = sorted(hidden_set)
+            return f"Revealed mailbox messages: {', '.join(str(v) for v in sorted(id_values))}"
+
+        return "Unknown mailbox command. Use: mailbox read|sendto|hide|reveal"
+
     def _cmd_stats(self, args: list[str]) -> str:
         if args and args[0].lower() == "npc":
             if len(args) < 2:
@@ -754,6 +846,12 @@ class GameEngine:
         self.saves.write_player_config(config)
         return f"Player name set to: {new_name}"
 
+    def _cmd_version(self, _: list[str]) -> str:
+        version = str(getattr(self, "app_version", "") or "").strip()
+        if version:
+            return f"Version: {version}"
+        return "Version: unknown"
+
     def _cmd_settings(self, args: list[str]) -> str:
         config = self.saves.read_player_config()
         if not args:
@@ -798,13 +896,16 @@ class GameEngine:
                     f"- current_date: {calendar_state['current_date']}\n"
                     f"- seed: {calendar_state['seed']}\n"
                     f"- next_new_game_date_override: {pending}\n"
-                    "Usage: settings calendar timezone <iana_tz> | "
-                    "settings calendar seed <int|randomize> | "
-                    "settings calendar timetravel <YYYY-MM-DD|clear>"
+                    "settings calendar timezone <iana_tz>\n"
+                    "settings calendar seed <view|int|randomize>\n"
+                    "settings calendar timetravel <YYYY-MM-DD|clear|help>"
                 )
 
             sub = args[1].lower() if len(args) > 1 else ""
+
             if sub == "timezone":
+                if len(args) == 2:
+                    return f"Calendar timezone: {calendar_state['timezone']}"
                 if len(args) != 3:
                     return "Usage: settings calendar timezone <iana_tz>"
                 tz_name = args[2]
@@ -822,16 +923,20 @@ class GameEngine:
                 )
 
             if sub == "seed":
+                if len(args) == 2:
+                    return "Usage: settings calendar seed <view|int|randomize>"
                 if len(args) != 3:
-                    return "Usage: settings calendar seed <int|randomize>"
+                    return "Usage: settings calendar seed <view|int|randomize>"
                 raw = args[2].lower()
+                if raw == "view":
+                    return f"Calendar seed: {calendar_state['seed']}"
                 if raw == "randomize":
                     new_seed = random.randint(1, 2_147_483_647)
                 else:
                     try:
                         new_seed = int(raw)
                     except ValueError:
-                        return "Usage: settings calendar seed <int|randomize>"
+                        return "Usage: settings calendar seed <view|int|randomize>"
                 config["calendar_seed"] = int(new_seed)
                 self.saves.write_player_config(config)
                 calendar_state["seed"] = int(new_seed)
@@ -839,9 +944,19 @@ class GameEngine:
                 return f"Calendar seed set to {new_seed}."
 
             if sub == "timetravel":
+                if len(args) == 2:
+                    return "Usage: settings calendar timetravel <YYYY-MM-DD|clear|help>"
                 if len(args) != 3:
-                    return "Usage: settings calendar timetravel <YYYY-MM-DD|clear>"
+                    return "Usage: settings calendar timetravel <YYYY-MM-DD|clear|help>"
                 target = args[2].lower()
+                if target == "help":
+                    pending = str(config.get("new_game_start_date", "none"))
+                    return (
+                        "Time travel is new-game-only.\n"
+                        "Use `settings calendar timetravel YYYY-MM-DD` to set the next new session start date.\n"
+                        "Use `settings calendar timetravel clear` to remove it.\n"
+                        f"Current pending override: {pending}"
+                    )
                 if target == "clear":
                     config.pop("new_game_start_date", None)
                     self.saves.write_player_config(config)
@@ -859,9 +974,9 @@ class GameEngine:
 
             return (
                 "Unknown calendar settings command. "
-                "Usage: settings calendar timezone <iana_tz> | "
-                "settings calendar seed <int|randomize> | "
-                "settings calendar timetravel <YYYY-MM-DD|clear>"
+                "Usage: settings calendar | settings calendar timezone <iana_tz> | "
+                "settings calendar seed <view|int|randomize> | "
+                "settings calendar timetravel <YYYY-MM-DD|clear|help>"
             )
 
         return (
@@ -1051,9 +1166,7 @@ class GameEngine:
         for day in days:
             combined = self._all_events_for_day(day)
             if combined:
-                descriptions = "; ".join(
-                    f"{row.get('name')}: {row.get('description', '')}" for row in combined
-                )
+                descriptions = "; ".join(self._format_event_for_output(row) for row in combined)
                 lines.append(f"- {day.isoformat()} ({day.strftime('%a')}): {descriptions}")
             else:
                 lines.append(f"- {day.isoformat()} ({day.strftime('%a')}): no events")
@@ -1072,6 +1185,7 @@ class GameEngine:
     def _calendar_day_summary(self, seed: int, target: date) -> str:
         weather = weather_for_date(seed, target)
         lines = [f"Calendar Day: {target.isoformat()} ({target.strftime('%A')})"]
+        lines.append(f"- Forecast: {weather.emoji} {weather.weather_type}")
         lines.append(f"- Moon Phase: {weather.moon_phase}")
         events = events_for_day(self.world, target)
         adventure_events = self._adventure_events_for_day(target)
@@ -1081,7 +1195,7 @@ class GameEngine:
         else:
             lines.append("- Events:")
             for event in events:
-                lines.append(f"  - {event.get('name')}: {event.get('description', '')}")
+                lines.append(f"  - {self._format_event_for_output(event)}")
         return "\n".join(lines)
 
     def _calendar_day_weather(self, seed: int, target: date) -> str:
@@ -1145,7 +1259,16 @@ class GameEngine:
         return day_events
 
     def _all_events_for_day(self, target: date) -> list[dict[str, Any]]:
-        return self._adventure_events_for_day(target) + events_for_day(self.world, target)
+        global_events: list[dict[str, Any]] = []
+        for row in events_for_day(self.world, target):
+            if not isinstance(row, dict):
+                continue
+            cloned = dict(row)
+            cloned.setdefault("source", "global")
+            if cloned.get("type") == "holiday":
+                cloned["source"] = "holiday"
+            global_events.append(cloned)
+        return self._adventure_events_for_day(target) + global_events
 
     def _journal_dates(self) -> set[date]:
         state = self._calendar_state()
@@ -1174,6 +1297,43 @@ class GameEngine:
         if target in self._journal_dates():
             return "green"
         return ""
+
+    def _event_color_tag(self, event: dict[str, Any]) -> str:
+        source = str(event.get("source", "global")).lower()
+        if source == "adventure":
+            return "yellow"
+        if source in {"global", "holiday"}:
+            return "blue"
+        return ""
+
+    def _format_event_for_output(self, event: dict[str, Any]) -> str:
+        name = str(event.get("name", "Event"))
+        description = str(event.get("description", "")).strip()
+        tag = self._event_color_tag(event)
+        if tag:
+            name = f"[{tag}]{name}[/{tag}]"
+        if description:
+            return f"{name}: {description}"
+        return name
+
+    def _parse_message_id_range(self, raw: str) -> set[int]:
+        token = str(raw).strip()
+        if not token:
+            return set()
+        if "-" not in token:
+            if token.isdigit():
+                return {int(token)}
+            return set()
+        start_raw, end_raw = token.split("-", 1)
+        if not start_raw.isdigit() or not end_raw.isdigit():
+            return set()
+        start = int(start_raw)
+        end = int(end_raw)
+        if start <= 0 or end <= 0:
+            return set()
+        if end < start:
+            start, end = end, start
+        return set(range(start, end + 1))
 
     def _default_npc_stats_unlocks(self) -> dict[str, bool]:
         return {npc_id: False for npc_id in self.world.get("npcs", {}).keys()}

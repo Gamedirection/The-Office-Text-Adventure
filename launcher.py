@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import os
 from pathlib import Path
+import re
 import site
 import subprocess
 import sys
@@ -21,6 +22,11 @@ def parse_args() -> argparse.Namespace:
         choices=["tui", "gui"],
         default="tui",
         help="Select interface mode. Defaults to terminal UI.",
+    )
+    parser.add_argument(
+        "--player-root",
+        default="",
+        help="Optional player data folder path. Defaults to <project>/.player for both GUI and TUI.",
     )
     return parser.parse_args()
 
@@ -86,9 +92,24 @@ def _try_enable_vendor_pyside6(vendor_dir: Path) -> bool:
     return importlib.util.find_spec("PySide6") is not None
 
 
+def detect_version_from_changelog(project_root: Path) -> str:
+    changelog = project_root / "CHANGELOG.md"
+    if not changelog.exists():
+        return "0.0.0"
+    pattern = re.compile(r"^## \[(\d+\.\d+\.\d+)\]")
+    for line in changelog.read_text(encoding="utf-8").splitlines():
+        match = pattern.match(line.strip())
+        if match:
+            return match.group(1)
+    return "0.0.0"
+
+
 def main() -> None:
     args = parse_args()
-    engine = GameEngine()
+    project_root = Path(__file__).resolve().parent
+    player_root = Path(args.player_root).expanduser() if args.player_root else (project_root / ".player")
+    engine = GameEngine(player_root=player_root)
+    engine.app_version = detect_version_from_changelog(project_root)
 
     if args.mode == "gui":
         if not ensure_pyside6_installed():

@@ -132,5 +132,45 @@ class SaveManager:
         )
         return True
 
+    def read_global_mailbox(self) -> list[dict[str, Any]]:
+        mailbox_path = self._global_mailbox_path()
+        if not mailbox_path.exists():
+            return []
+        payload = yaml.safe_load(mailbox_path.read_text(encoding="utf-8")) or {}
+        messages = payload.get("messages", [])
+        if not isinstance(messages, list):
+            return []
+        return messages
+
+    def append_global_mailbox_message(
+        self,
+        sender: str,
+        recipient: str,
+        text: str,
+    ) -> int:
+        messages = self.read_global_mailbox()
+        next_id = 1
+        if messages:
+            next_id = max(int(msg.get("id", 0)) for msg in messages) + 1
+        messages.append(
+            {
+                "id": next_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "sender": sender,
+                "recipient": recipient,
+                "text": text,
+            }
+        )
+        mailbox_path = self._global_mailbox_path()
+        mailbox_path.parent.mkdir(parents=True, exist_ok=True)
+        mailbox_path.write_text(
+            yaml.safe_dump({"messages": messages}, sort_keys=False),
+            encoding="utf-8",
+        )
+        return next_id
+
     def _journal_path(self, creator: str, adventure_id: str) -> Path:
         return self.journal_root / creator / f"{adventure_id}.yaml"
+
+    def _global_mailbox_path(self) -> Path:
+        return self.shared_saves_root / "global-mailbox.yaml"

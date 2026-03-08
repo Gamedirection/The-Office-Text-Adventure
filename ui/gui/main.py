@@ -38,7 +38,11 @@ class AdventureGUI(QMainWindow):
         self._config = self.engine.saves.read_player_config()
         self._gui_theme = str(self._config.get("gui_theme", "Light"))
 
-        self.setWindowTitle("Office Text Adventure")
+        version = getattr(self.engine, "app_version", "").strip()
+        title = "Office Text Adventure"
+        if version:
+            title = f"Office Text Adventure v{version}"
+        self.setWindowTitle(title)
         self.resize(980, 700)
 
         self._build_layout()
@@ -186,6 +190,11 @@ class AdventureGUI(QMainWindow):
             "journal read 1",
             "journal add ",
             "journal remove 1",
+            "mailbox read",
+            "mailbox sendto global ",
+            "mailbox sendto Alex ",
+            "mailbox hide 1-3",
+            "mailbox reveal 1-3",
             "calendar month",
             "calendar week",
             "calendar day",
@@ -203,10 +212,13 @@ class AdventureGUI(QMainWindow):
             "settings",
             "settings autosave on",
             "settings autosave off",
-            "settings calendar",
+            "settings calendar timezone",
             "settings calendar timezone UTC",
+            "settings calendar seed view",
             "settings calendar seed randomize",
+            "settings calendar timetravel help",
             "settings calendar timetravel 2026-03-07",
+            "version",
             "help",
         ]
         if not self.engine.adventure:
@@ -342,6 +354,8 @@ class AdventureGUI(QMainWindow):
             "[/gold]": "</span>",
             "[yellow]": '<span style="color:#ca8a04;">',
             "[/yellow]": "</span>",
+            "[pink]": '<span style="color:#ec4899;">',
+            "[/pink]": "</span>",
             "[magenta]": '<span style="color:#a855f7;">',
             "[/magenta]": "</span>",
             "[cyan]": '<span style="color:#0891b2;">',

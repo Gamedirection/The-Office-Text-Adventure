@@ -44,6 +44,10 @@ def test_runtime_start_choose_save_load(tmp_path: Path) -> None:
     assert "=== Game ===" in help_output
     assert "inspect <item_or_object_id | npc_id stats>" in help_output
 
+    engine.app_version = "9.9.9"
+    version_output = engine.execute_command("version")
+    assert "Version: 9.9.9" in version_output
+
 
 def test_runtime_list_saves_and_move(tmp_path: Path) -> None:
     player_root = tmp_path / ".player"
@@ -63,6 +67,15 @@ def test_runtime_list_saves_and_move(tmp_path: Path) -> None:
 
     move_fail = engine.execute_command("move lobby")
     assert "cannot move directly" in move_fail
+
+
+def test_load_missing_slot_returns_message_instead_of_crash(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+    engine = GameEngine(player_root=player_root)
+    engine.start(_key_for_creator("dylon"))
+
+    missing = engine.execute_command("load 1")
+    assert "Save slot '1' not found for this adventure." in missing
 
 
 def test_choose_preview_and_journal_commands(tmp_path: Path) -> None:
@@ -494,3 +507,42 @@ def test_calendar_month_color_priority_and_relative_adventure_event(tmp_path: Pa
     engine.state.flags["calendar"]["current_date"] = "2026-03-12"
     day_view = engine.execute_command("calendar day")
     assert "Janet car follow-up" in day_view
+
+
+def test_mailbox_send_read_hide_reveal(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+
+    sender = GameEngine(player_root=player_root)
+    sender.start(_key_for_creator("alex"))
+    sender.execute_command("name Alex")
+
+    sent_global = sender.execute_command("mailbox sendto global Hello everyone.")
+    assert "sent to global" in sent_global
+    sent_jon = sender.execute_command("mailbox sendto Jon Heads-up on the triage flow.")
+    assert "sent to Jon" in sent_jon
+
+    alex_read = sender.execute_command("mailbox read")
+    assert "[global]" in alex_read
+    assert "Hello everyone." in alex_read
+    assert "Heads-up on the triage flow." in alex_read
+    assert "[pink]>" in alex_read
+
+    jon = GameEngine(player_root=player_root)
+    jon.start(_key_for_creator("jon"))
+    jon.execute_command("name Jon")
+
+    jon_read = jon.execute_command("mailbox read")
+    assert "Hello everyone." in jon_read
+    assert "Heads-up on the triage flow." in jon_read
+    assert "[green]" in jon_read
+    assert "[blue]" in jon_read
+
+    hide = jon.execute_command("mailbox hide 1-2")
+    assert "Hid mailbox messages" in hide
+    hidden_read = jon.execute_command("mailbox read")
+    assert "Mailbox is empty." in hidden_read
+
+    reveal = jon.execute_command("mailbox reveal 2-2")
+    assert "Revealed mailbox messages: 2" in reveal
+    revealed_read = jon.execute_command("mailbox read")
+    assert "Heads-up on the triage flow." in revealed_read

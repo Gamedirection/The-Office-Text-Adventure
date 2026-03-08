@@ -54,6 +54,9 @@ Or directly:
 python launcher.py --mode tui
 ```
 
+Both GUI and TUI share the same player/save data at `<project>/.player` when launched through `launcher.py`.
+You can override this with `--player-root <path>` if needed.
+
 TUI Tab completion:
 
 - If `prompt_toolkit` is installed, `Tab` autocompletes and cycles available commands.

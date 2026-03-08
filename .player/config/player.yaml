@@ -1,4 +1,4 @@
-player_name: Alex
+player_name: alex
 default_interface: tui
 tui_color_enabled: true
 autosave_enabled: true
@@ -11,8 +11,8 @@ player_stats:
   luck: 3
 last_session:
   creator: .sample
-  adventure_id: release-day
-  slot: autosave
+  adventure_id: sprint-standup
+  slot: '1'
 gui_theme: Dark
 calendar_timezone: UTC
 calendar_seed: 123456

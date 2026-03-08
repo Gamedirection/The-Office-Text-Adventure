@@ -58,6 +58,8 @@ def _format_tui_output(message: str, color_enabled: bool) -> str:
             "[/gold]": palette.reset,
             "[yellow]": palette.gold,
             "[/yellow]": palette.reset,
+            "[pink]": "\033[95m",
+            "[/pink]": palette.reset,
             "[magenta]": palette.magenta,
             "[/magenta]": palette.reset,
             "[cyan]": palette.cyan,
@@ -115,6 +117,11 @@ def _available_command_options(engine: GameEngine) -> list[str]:
         "journal read 1",
         "journal add ",
         "journal remove 1",
+        "mailbox read",
+        "mailbox sendto global ",
+        "mailbox sendto Alex ",
+        "mailbox hide 1-3",
+        "mailbox reveal 1-3",
         "calendar month",
         "calendar week",
         "calendar day",
@@ -132,10 +139,13 @@ def _available_command_options(engine: GameEngine) -> list[str]:
         "settings",
         "settings autosave on",
         "settings autosave off",
-        "settings calendar",
+        "settings calendar timezone",
         "settings calendar timezone UTC",
+        "settings calendar seed view",
         "settings calendar seed randomize",
+        "settings calendar timetravel help",
         "settings calendar timetravel 2026-03-07",
+        "version",
         "help",
         "quit",
     ]
@@ -198,10 +208,29 @@ def _select_adventure(engine: GameEngine) -> str | None:
     valid = [a for a in adventures if a.get("valid")]
     invalid = [a for a in adventures if not a.get("valid")]
 
-    print("\n=== Office Text Adventure ===")
+    version = getattr(engine, "app_version", "").strip()
+    header = "=== Office Text Adventure ==="
+    if version:
+        header = f"=== Office Text Adventure v{version} ==="
+    print(f"\n{header}")
     print("Select an adventure:")
+    use_color = _is_tui_color_enabled(engine)
+    palette = TUIColorPalette()
     for idx, adventure in enumerate(valid, start=1):
-        print(f"{idx}. {adventure.get('name', adventure['adventure_name'])} ({adventure['key']})")
+        line = f"{idx}. {adventure.get('name', adventure['adventure_name'])} ({adventure['key']})"
+        if use_color:
+            line = f"{palette.bold}{palette.green}{line}{palette.reset}"
+        print(line)
+        creator = str(adventure.get("creator", ""))
+        adventure_name = str(adventure.get("adventure_name", ""))
+        slots = engine.saves.list_slots(creator, adventure_name)
+        if slots:
+            print("   Saves:")
+            for save_idx, slot in enumerate(slots, start=1):
+                print(f"   {save_idx}. {slot}")
+        else:
+            print("   Saves: none")
+    print("Tip: type '<adventure_index> <save_index>' to load a save directly (example: 1 1).")
     print("R. Resume last session")
     print("Q. Quit")
 
@@ -218,6 +247,25 @@ def _select_adventure(engine: GameEngine) -> str | None:
         _print_tui(message, engine)
         if message.startswith("Loaded save slot"):
             return "__LOADED__"
+        return _select_adventure(engine)
+
+    parts = raw.split()
+    if len(parts) == 2 and all(part.isdigit() for part in parts):
+        adv_idx = int(parts[0])
+        save_idx = int(parts[1])
+        if 1 <= adv_idx <= len(valid):
+            selected = valid[adv_idx - 1]
+            creator = str(selected.get("creator", ""))
+            adventure_name = str(selected.get("adventure_name", ""))
+            slots = engine.saves.list_slots(creator, adventure_name)
+            if 1 <= save_idx <= len(slots):
+                slot = slots[save_idx - 1]
+                message = engine.load(creator, adventure_name, slot)
+                _print_tui(message, engine)
+                return "__LOADED__"
+            print("Invalid save selection for that adventure.")
+            return _select_adventure(engine)
+        print("Invalid adventure selection.")
         return _select_adventure(engine)
 
     if raw.isdigit():
