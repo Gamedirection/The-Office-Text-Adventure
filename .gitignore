@@ -8,3 +8,4 @@ __pycache__/
 # Player runtime state is local and should not be committed.
 .player/saves/**/*.yaml
 .player/journal/**/*.yaml
+.player/config/**/*.yaml

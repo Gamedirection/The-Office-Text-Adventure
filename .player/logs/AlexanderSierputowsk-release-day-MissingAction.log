@@ -1,0 +1,14 @@
+2026-03-07T23:40:23.743745+00:00 | reason=unknown_command | command=goto
+2026-03-08T00:11:03.561782+00:00 | reason=unknown_command | command=ls
+2026-03-08T00:29:26.733891+00:00 | reason=no_outcome_configured | command=inspect qa_riley vibe
+2026-03-08T00:29:32.731780+00:00 | reason=no_outcome_configured | command=inspect qa_riley favo
+2026-03-08T00:29:40.711204+00:00 | reason=no_outcome_configured | command=inspect qa_riley favorability
+2026-03-08T00:29:50.967399+00:00 | reason=unknown_command | command=sats npc qa_riley
+2026-03-08T03:17:57.644579+00:00 | reason=unknown_command | command=1
+2026-03-08T03:30:54.476450+00:00 | reason=unknown_command | command=clear
+2026-03-08T03:31:08.246831+00:00 | reason=unknown_command | command=exit
+2026-03-08T03:31:10.333167+00:00 | reason=unknown_command | command=quit
+2026-03-08T03:31:11.815684+00:00 | reason=unknown_command | command=q
+2026-03-08T03:37:02.118668+00:00 | reason=unknown_command | command=version
+2026-03-08T03:38:30.535257+00:00 | reason=unknown_command | command=version
+2026-03-08T03:39:37.233846+00:00 | reason=unknown_command | command=r
