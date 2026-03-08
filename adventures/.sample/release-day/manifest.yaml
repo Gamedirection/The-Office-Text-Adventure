@@ -1,0 +1,11 @@
+﻿id: release-day
+name: "Sample: Release Day Relay"
+creator: "Sample"
+description: "Coordinate release tasks across teams with limited time."
+start_node: intro
+supported_players:
+  - Alex
+  - Jon
+  - Dylon
+content:
+  story_file: code/story.yaml

@@ -1,0 +1,11 @@
+﻿# Shared world objects available for inspect commands.
+objects:
+  - id: sprint_board
+    name: "Sprint Board"
+    description: "Cards show progress, blockers, and a risky release ticket."
+  - id: status_screen
+    name: "Status Screen"
+    description: "Dashboards show build health and incident alerts."
+  - id: whiteboard_plan
+    name: "Whiteboard Plan"
+    description: "A hand-drawn sequence of release tasks and owners."

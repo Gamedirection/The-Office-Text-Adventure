@@ -1,0 +1,26 @@
+﻿# Shared office locations reused by all adventures.
+locations:
+  - id: lobby
+    name: "Main Lobby"
+    description: "A bright lobby with a coffee machine and visitor badges."
+    connections:
+      - dev_bay
+      - break_room
+  - id: dev_bay
+    name: "Developer Bay"
+    description: "Rows of desks, monitors, and sticky notes from the sprint."
+    connections:
+      - lobby
+      - meeting_room
+      - break_room
+  - id: meeting_room
+    name: "Meeting Room A"
+    description: "A glass room with a whiteboard full of timelines."
+    connections:
+      - dev_bay
+  - id: break_room
+    name: "Break Room"
+    description: "Snacks, a microwave, and gossip near the fridge."
+    connections:
+      - lobby
+      - dev_bay

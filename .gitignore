@@ -1,0 +1,10 @@
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+.idea/
+
+# Player runtime state is local and should not be committed.
+.player/saves/**/*.yaml
+.player/journal/**/*.yaml

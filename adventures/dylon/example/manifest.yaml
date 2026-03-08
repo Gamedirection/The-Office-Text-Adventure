@@ -1,0 +1,11 @@
+﻿id: release-day
+name: "Dylon: Example Adventure"
+creator: "Dylon"
+description: "Example adventure for Dylon's."
+start_node: intro
+supported_players:
+  - Alex
+  - Jon
+  - Dylon
+content:
+  story_file: code/story.yaml

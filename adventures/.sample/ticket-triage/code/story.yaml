@@ -1,0 +1,53 @@
+﻿nodes:
+  intro:
+    location_id: lobby
+    text: "Support tickets are flooding in. You need fast triage."
+    npcs:
+      - it_owen
+    items:
+      - keycard
+    objects:
+      - status_screen
+    choices:
+      - id: check_dashboard
+        text: "Inspect the status dashboard first."
+        next_node: dashboard
+      - id: ask_it
+        text: "Talk with Owen before touching tickets."
+        next_node: with_it
+
+  dashboard:
+    location_id: dev_bay
+    text: "The dashboard shows one severe issue and three medium ones."
+    objects:
+      - status_screen
+    choices:
+      - id: severe_first
+        text: "Prioritize the severe issue."
+        next_node: success
+      - id: easiest_first
+        text: "Clear easy tickets for quick wins."
+        next_node: backlog_grows
+
+  with_it:
+    location_id: dev_bay
+    text: "Owen gives context on a permissions outage affecting many users."
+    npcs:
+      - it_owen
+    choices:
+      - id: pair_debug
+        text: "Pair with Owen on root cause."
+        next_node: success
+      - id: split_work
+        text: "Handle separate tickets independently."
+        next_node: backlog_grows
+
+  success:
+    location_id: dev_bay
+    text: "Critical tickets are under control and demo prep stays on schedule."
+    choices: []
+
+  backlog_grows:
+    location_id: dev_bay
+    text: "Ticket churn increases. Triage strategy needs tighter focus."
+    choices: []

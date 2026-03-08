@@ -1,0 +1,62 @@
+﻿# Story template notes:
+# - nodes.<node_id>.choices[].id must be unique within that node.
+# - next_node must reference another node in this file.
+# - location_id/npcs/items/objects reference shared world IDs.
+nodes:
+  intro:
+    location_id: dev_bay
+    text: "Standup starts in five minutes. Your board still has one unclear task."
+    npcs:
+      - manager_mina
+    items:
+      - sticky_note
+    objects:
+      - sprint_board
+    choices:
+      - id: prep_board
+        text: "Review the sprint board before standup."
+        next_node: board_review
+        add_items:
+          - deploy_checklist
+      - id: head_to_room
+        text: "Walk into the meeting immediately."
+        next_node: meeting_start
+
+  board_review:
+    location_id: dev_bay
+    text: "You find a deploy checklist clipped behind a sticky note."
+    npcs:
+      - qa_riley
+    objects:
+      - sprint_board
+    choices:
+      - id: ask_qa
+        text: "Talk to Riley before standup."
+        next_node: meeting_start
+      - id: join_late
+        text: "Join standup slightly late but prepared."
+        next_node: meeting_start
+
+  meeting_start:
+    location_id: meeting_room
+    text: "Mina asks for blockers first. You can lead with risk or confidence."
+    npcs:
+      - manager_mina
+    choices:
+      - id: present_risk
+        text: "Raise release risk and propose mitigation."
+        next_node: resolved
+        requires_item: deploy_checklist
+      - id: quick_update
+        text: "Give a brief update and move on."
+        next_node: unresolved
+
+  resolved:
+    location_id: meeting_room
+    text: "Your preparation helped align the team. Sprint plan is stable."
+    choices: []
+
+  unresolved:
+    location_id: meeting_room
+    text: "Questions pile up after standup. Next time, gather evidence first."
+    choices: []

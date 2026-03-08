@@ -1,0 +1,14 @@
+﻿# Shared office items.
+items:
+  - id: keycard
+    name: "Office Keycard"
+    description: "Lets you move through secure doors without waiting."
+  - id: sticky_note
+    name: "Sticky Note"
+    description: "Contains a clue from a teammate."
+  - id: deploy_checklist
+    name: "Deploy Checklist"
+    description: "A must-have list before release."
+  - id: coffee
+    name: "Coffee"
+    description: "Boosts confidence for difficult conversations."

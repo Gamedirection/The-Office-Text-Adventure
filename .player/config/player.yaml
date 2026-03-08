@@ -1,0 +1,16 @@
+player_name: Alex
+default_interface: tui
+tui_color_enabled: true
+autosave_enabled: true
+autosave_notify_enabled: false
+autosave_slot: autosave
+player_stats:
+  intelligence: 3
+  vibes: 3
+  physique: 3
+  luck: 3
+last_session:
+  creator: .sample
+  adventure_id: release-day
+  slot: autosave
+gui_theme: Dark

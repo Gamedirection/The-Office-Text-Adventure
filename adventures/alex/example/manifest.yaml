@@ -1,0 +1,19 @@
+﻿# Adventure manifest contract:
+# - id: stable identifier
+# - name: display name
+# - creator: owner/designer name
+# - description: short pitch shown in launcher
+# - start_node: first node id from story file
+# - supported_players: optional guidance for team usage
+# - content.story_file: path relative to this adventure folder
+id: sprint-standup
+name: "Alex: Adventure Name"
+creator: "Alex"
+description: "Description of the adventure, what it's about, and why it's fun."
+start_node: intro
+supported_players:
+  - Alex
+  - Jon
+  - Dylon
+content:
+  story_file: code/story.yaml

@@ -1,0 +1,53 @@
+﻿nodes:
+  intro:
+    location_id: break_room
+    text: "Release window opens in an hour. You need alignment and confidence."
+    npcs:
+      - qa_riley
+    items:
+      - coffee
+    objects:
+      - whiteboard_plan
+    choices:
+      - id: review_plan
+        text: "Review the whiteboard plan in detail."
+        next_node: plan_review
+      - id: fast_track
+        text: "Push straight to release prep."
+        next_node: release_prep
+
+  plan_review:
+    location_id: meeting_room
+    text: "You map dependencies and discover a hidden handoff risk."
+    objects:
+      - whiteboard_plan
+    choices:
+      - id: sync_team
+        text: "Sync with QA before release."
+        next_node: release_prep
+        set_flags:
+          qa_synced: true
+
+  release_prep:
+    location_id: dev_bay
+    text: "Final checks remain. Riley asks whether QA sync is complete."
+    npcs:
+      - qa_riley
+    choices:
+      - id: deploy_confident
+        text: "Proceed with release checklist."
+        next_node: smooth_release
+        requires_item: coffee
+      - id: deploy_rushed
+        text: "Skip a few checks to save time."
+        next_node: rollback
+
+  smooth_release:
+    location_id: dev_bay
+    text: "Release ships cleanly and stakeholders celebrate the coordination."
+    choices: []
+
+  rollback:
+    location_id: dev_bay
+    text: "A missed check triggers rollback. Debrief and improve next cycle."
+    choices: []

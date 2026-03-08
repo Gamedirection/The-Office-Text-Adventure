@@ -1,0 +1,11 @@
+﻿id: ticket-triage
+name: "Jon: Example Adventure"
+creator: "Jon"
+description: "Example adventure for Jon's."
+start_node: intro
+supported_players:
+  - Alex
+  - Jon
+  - Dylon
+content:
+  story_file: code/story.yaml

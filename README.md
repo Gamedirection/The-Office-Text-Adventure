@@ -1,93 +1,294 @@
-# The Office Text Adventure
+﻿# Office Text Adventure Template
 
+A collaboration-first template for building office-themed text adventures.
 
+## Goals
 
-## Getting started
+- Share one world (locations, items, NPCs, objects) across many adventures.
+- Keep each designer/employee's stories separate in `adventures/<creator>/<adventure_name>/`.
+- Run the same game engine in both a terminal UI and a Python PySide6 GUI.
+- Keep save state local in `.player/` so players can resume immediately.
+- Provide an AI NPC plugin interface with a built-in mock fallback.
+- Keep gameplay non-combat and centered on discovery, storytelling, and learning.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Project Layout
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- `engine/`: scanner, loader/validation, command execution, save manager, AI adapter interfaces.
+- `world/`: shared office content YAML (`locations`, `items`, `npcs`, `objects`).
+- `adventures/`: per-creator adventures scanned automatically.
+- `ui/tui/`: plain stdin/stdout interface for Linux terminal + Windows cmd compatibility.
+- `ui/gui/`: PySide6 desktop interface (PyCharm-friendly).
+- `scripts/`: launch scripts (`play.sh`, `play.cmd`).
+- `.player/`: local player config + save slots.
+- `docs/`: architecture, content authoring, AI plugin docs.
+- `tests/`: discovery, validation, runtime, NPC, and UI smoke tests.
 
-## Add your files
+## Requirements
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+1. Python 3.11+ recommended.
+2. Install dependencies:
 
+```bash
+pip install -r requirements.txt
 ```
-cd existing_repo
-git remote add origin https://gitlab.myctms.it/asierputowski/the-office-text-adventure.git
-git branch -M main
-git push -uf origin main
+
+## How To Play
+
+### Terminal UI (recommended starter)
+
+Linux/macOS:
+
+```bash
+bash scripts/play.sh
 ```
 
-## Integrate with your tools
+Windows cmd/PowerShell:
 
-- [ ] [Set up project integrations](https://gitlab.myctms.it/asierputowski/the-office-text-adventure/-/settings/integrations)
+```powershell
+scripts\play.cmd
+```
 
-## Collaborate with your team
+Or directly:
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+python launcher.py --mode tui
+```
 
-## Test and Deploy
+TUI Tab completion:
 
-Use the built-in continuous integration in GitLab.
+- If `prompt_toolkit` is installed, `Tab` autocompletes and cycles available commands.
+- Works across common terminals/shells (PowerShell, cmd, bash, zsh, fish) because completion is handled by the app, not shell-specific scripts.
+- If unavailable, TUI falls back to standard input without Tab completion.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+### PySide6 GUI
 
-***
+```bash
+python launcher.py --mode gui
+```
 
-# Editing this README
+At boot, choose an adventure. You can also resume your last saved session.
+In the GUI command box, press `Tab` to cycle through currently available command options.
+Use `Shift+Tab` to cycle backward.
+GUI preferences are saved in player config for theme (`Light`/`Dark`).
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Commands During Play
 
-## Suggestions for a good README
+### Interact
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+- `look`
+- `choose <choice_id>`
+- `talk <npc_id> [interaction]`
+- `inspect <item_or_object_id | npc_id stats>`
+- `goto <location_id>`
+- `check vibes <npc_id> [description]` (shows favorability before/after)
 
-## Name
-Choose a self-explaining name for your project.
+### Player
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+- `inventory`
+- `journal [list|read <page>|remove <page>|add <note text>]` (alias: `notes`)
+- `stats [npc <npc_id>]`
+- `check <intelligence|vibes|physique|luck> [description]`
+- `name [new player name]`
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Game
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- `save <slot>`
+- `load <slot>`
+- `saves` (or `list-saves`)
+- `settings [autosave on|off]`
+- `settings autosave-notify on|off`
+- `help`
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Tip: if you type `choose` with no arguments, the game previews currently available `choose <choice_id>` options.
+Tip: typing `talk`, `choose`, `inspect`, or `goto` with no arguments shows an `Available now:` preview when options exist.
+If no options exist, the engine returns a default message like `No one to talk to right now`.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Save Files
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+- Player config: `.player/config/player.yaml`
+- Save slots: `.player/saves/<creator>/<adventure>/<slot>.yaml`
+- Journal pages: `.player/journal/<creator>/<adventure>.yaml`
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+## Autosave Setting
+
+In `.player/config/player.yaml`:
+
+- `autosave_enabled: true|false`
+- `autosave_notify_enabled: true|false`
+- `autosave_slot: <slot_name>`
+- `tui_color_enabled: true|false`
+
+Use in-game command `settings autosave on|off` to toggle autosave.
+Use `settings autosave-notify on|off` to show/hide autosave messages.
+When enabled, adventure-changing actions (like moving/choosing) update the autosave slot automatically.
+When `tui_color_enabled` is `true`, TUI output uses color coding (People gold, Items blue, Location green, etc.).
+
+TUI color coding default map:
+
+- People/NPC lines: Gold
+- Items lines: Blue
+- Location/header lines: Green
+- Objects lines: Magenta
+- Choices and "Available now" lines: Cyan
+
+## Adventure Text Styling (TUI)
+
+When `tui_color_enabled: true`, story text supports inline style tags:
+
+- Colors: `[green]...[/green]`, `[blue]...[/blue]`, `[gold]...[/gold]`, `[magenta]...[/magenta]`, `[cyan]...[/cyan]`
+- Text styles: `[bold]...[/bold]`, `[italic]...[/italic]`
+
+Example in a story node:
+
+```yaml
+text: "[bold][green]Standup starts now[/green][/bold]. [italic]Stay focused.[/italic]"
+```
+
+Notes:
+
+- These tags are for TUI rendering; GUI currently shows them as plain text.
+- Closing tags reset styling, so wrap only the parts you want styled.
+
+## Stats And Checks
+
+Stats are graded `1-6` (6 best, 1 worst):
+
+- `Intelligence`: problem-solving, planning, technical reasoning.
+- `Vibes`: social presence, empathy, communication.
+- `Physique`: stamina, coordination, physically demanding tasks.
+- `Luck`: chance-based outcomes and fortunate timing.
+
+Check rules use 1d6:
+
+- Roll `1` => `Critical Success`
+- Else roll `<= stat` => `Success`
+- Else roll `> stat` => `Failed`
+
+Each check output shows:
+
+- what the check is for,
+- current stat value,
+- roll result,
+- outcome (`Critical Success`, `Success`, or `Failed`).
+
+For `check vibes <npc_id> ...`:
+
+- NPC may roll first to apply a temporary modifier to your vibes (`+1`, `0`, or `-1`).
+- Then you roll once against your effective vibes (`<=` success, `>` fail, stat 6 always succeeds).
+- Output shows favorability before and after.
+
+## NPC Memory And Favorability
+
+NPCs now track persistent relationship memory in the save state:
+
+- `favorability` is `1-3`:
+  - `1`: they do not like you
+  - `2`: indifferent
+  - `3`: friends
+- NPC interaction effects can raise/lower favorability over time.
+- NPCs can remember tagged events and respond differently on future interactions.
+
+Starter NPC data is organized as:
+
+- `profile`: identity and character details
+- `stats`: Intelligence/Vibes/Physique/Luck
+- `relationship`: includes `favorability_default`
+- `dialogue`: interaction definitions and optional effects
+
+Example effect:
+
+```yaml
+effects:
+  favorability_delta: -1
+  memory_tag: "player_was_dismissive"
+```
+
+## NPC Stat Unlocks (Adventure-Controlled)
+
+NPC stats are hidden by default (`false`) until the adventure unlocks them.
+
+- `stats npc <npc_id>` and `inspect <npc_id> stats` will stay locked until unlocked.
+- Unlock from story content using either:
+  - `choices[].unlock_npc_stats: [npc_id, ...]`
+  - `nodes.<id>.unlock_npc_stats_on_enter: [npc_id, ...]`
+
+Example:
+
+```yaml
+choices:
+  - id: ask_it
+    text: "Talk with Owen before touching tickets."
+    next_node: with_it
+    unlock_npc_stats:
+      - it_owen
+```
+
+You can also unlock through NPC interaction logic with an intelligence-vs-NPC check:
+
+```yaml
+dialogue:
+  interactions:
+    profile_check:
+      mode: manual
+      unlock_stats_on_intelligence_check: true
+```
+
+Rule:
+
+- You can attempt this intelligence unlock check against an NPC once.
+- If that attempt fails, you must build that NPC's favorability to `3` (friends) before another unlock attempt can succeed.
+
+### Partial visibility behavior
+
+- If an NPC's full stats are still locked but you've revealed favorability, output will show:
+  - `Some stats for <npc> are still locked.`
+  - current favorability only
+- Reveal favorability with a successful `check vibes <npc_id> ...`.
+- View revealed favorability directly with:
+  - `inspect <npc_id> favorability`
+  - `inspect <npc_id> favo`
+  - `inspect <npc_id> vibe`
+  - `inspect <npc_id> vibes`
+
+## Company Setting Rules
+
+- Bullying, harassment, and aggressive actions are not allowed in adventure content.
+- This project is set in a workplace context and should reflect professional behavior.
+- Keep scenarios non-combat focused, even when stories are silly, lighthearted, or dramatic.
+- Prefer discovery, communication, collaboration, and learning outcomes over violence or intimidation.
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+1. Create a branch for your change.
+2. Add or update content under your designer folder in `adventures/<your_name>/...`.
+3. Keep IDs stable and cross-references valid.
+4. Run tests:
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+pytest -q
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+5. Commit with clear messages and open a pull request.
 
-## License
-For open source projects, say how it is licensed.
+### Adding A New Adventure
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+1. Create `adventures/<creator>/<adventure_name>/manifest.yaml`.
+2. Add story content file referenced by `content.story_file`.
+3. Use existing world IDs or add shared entities under `world/`.
+4. Launch the game and verify it appears in adventure selection.
+
+## AI NPC Plugin Notes
+
+- Default behavior uses `MockAIAdapter` (no API key needed).
+- NPC interactions choose `manual`, `ai`, or `hybrid` mode in `world/npcs/*.yaml`.
+- Replace adapter implementation in `engine/ai.py` and inject into `GameEngine` for real providers.
+
+## Missing Outcome Logs
+
+The engine records unhandled actions to per-adventure logs for content iteration:
+
+- `.player/logs/%USERNAME%-<Adventure>-MissingAction.log`
+
+Entries include UTC timestamp, reason, and original command to help authors add missing outcomes.
+
+

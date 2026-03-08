@@ -1,0 +1,11 @@
+﻿id: ticket-triage
+name: "Sample: Ticket Triage Rush"
+creator: "Sample"
+description: "Prioritize production tickets before the afternoon demo."
+start_node: intro
+supported_players:
+  - Alex
+  - Jon
+  - Dylon
+content:
+  story_file: code/story.yaml
