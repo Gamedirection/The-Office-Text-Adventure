@@ -19,9 +19,11 @@ class SaveManager:
         self.config_path = self.player_root / "config" / "player.yaml"
         self.saves_root = self.player_root / "saves"
         self.journal_root = self.player_root / "journal"
+        self.shared_saves_root = self.player_root / "shared-saves"
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         self.saves_root.mkdir(parents=True, exist_ok=True)
         self.journal_root.mkdir(parents=True, exist_ok=True)
+        self.shared_saves_root.mkdir(parents=True, exist_ok=True)
 
     def read_player_config(self) -> dict[str, Any]:
         if not self.config_path.exists():

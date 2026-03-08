@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
 
+from engine.calendar import parse_iso_date
 from engine.exceptions import ValidationError
 from engine.scanner import AdventureDescriptor
+
+ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
 
 
 @dataclass
@@ -18,6 +22,7 @@ class LoadedAdventure:
 
     descriptor: AdventureDescriptor
     story_nodes: dict[str, dict[str, Any]]
+    events: list[dict[str, Any]]
 
 
 class ContentLoader:
@@ -32,7 +37,10 @@ class ContentLoader:
             "items": self._load_entity_folder(self.world_root / "items", "items"),
             "npcs": self._load_entity_folder(self.world_root / "npcs", "npcs"),
             "objects": self._load_entity_folder(self.world_root / "objects", "objects"),
+            "events": self._load_entity_folder(self.world_root / "events", "events"),
+            "holidays": self._load_entity_folder(self.world_root / "calendar", "holidays"),
         }
+        self._validate_calendar_entities(world)
         return world
 
     def load_adventure(self, descriptor: AdventureDescriptor, world: dict[str, Any]) -> LoadedAdventure:
@@ -50,8 +58,11 @@ class ContentLoader:
 
         story_data = yaml.safe_load(story_path.read_text(encoding="utf-8")) or {}
         nodes = story_data.get("nodes", {})
+        events = story_data.get("events", [])
         if not isinstance(nodes, dict) or not nodes:
             raise ValidationError(f"Adventure '{descriptor.key}' has no story nodes")
+        if not isinstance(events, list):
+            raise ValidationError(f"Adventure '{descriptor.key}' expected 'events' to be a list")
 
         start_node = descriptor.manifest.get("start_node")
         if start_node not in nodes:
@@ -60,7 +71,8 @@ class ContentLoader:
             )
 
         self._validate_story_references(descriptor, nodes, world)
-        return LoadedAdventure(descriptor=descriptor, story_nodes=nodes)
+        self._validate_adventure_events(descriptor, events)
+        return LoadedAdventure(descriptor=descriptor, story_nodes=nodes, events=events)
 
     def _load_entity_folder(self, folder: Path, list_key: str) -> dict[str, dict[str, Any]]:
         entities: dict[str, dict[str, Any]] = {}
@@ -118,3 +130,74 @@ class ContentLoader:
                     raise ValidationError(
                         f"{descriptor.key} node '{node_id}' choice references unknown next node '{next_node}'"
                     )
+
+    def _validate_calendar_entities(self, world: dict[str, dict[str, dict[str, Any]]]) -> None:
+        for event_id, event in world.get("events", {}).items():
+            self._validate_simple_id(event_id, kind="event")
+            start_raw = event.get("start_date")
+            if not start_raw:
+                raise ValidationError(f"event '{event_id}' missing required 'start_date'")
+            start = parse_iso_date(str(start_raw), field_name=f"event '{event_id}' start_date")
+            end_raw = event.get("end_date") or start_raw
+            end = parse_iso_date(str(end_raw), field_name=f"event '{event_id}' end_date")
+            if end < start:
+                raise ValidationError(f"event '{event_id}' has end_date before start_date")
+
+        for holiday_id, holiday in world.get("holidays", {}).items():
+            self._validate_simple_id(holiday_id, kind="holiday")
+            date_raw = holiday.get("date")
+            if not date_raw:
+                raise ValidationError(f"holiday '{holiday_id}' missing required 'date'")
+            parse_iso_date(str(date_raw), field_name=f"holiday '{holiday_id}' date")
+
+    def _validate_simple_id(self, entity_id: str, kind: str) -> None:
+        if not ID_PATTERN.match(entity_id):
+            raise ValidationError(
+                f"{kind} id '{entity_id}' is invalid. Use lowercase letters, numbers, and underscores."
+            )
+
+    def _validate_adventure_events(
+        self,
+        descriptor: AdventureDescriptor,
+        events: list[dict[str, Any]],
+    ) -> None:
+        seen: set[str] = set()
+        for event in events:
+            event_id = str(event.get("id", ""))
+            if not event_id:
+                raise ValidationError(f"{descriptor.key} adventure event missing required 'id'")
+            self._validate_simple_id(event_id, kind="adventure event")
+            if event_id in seen:
+                raise ValidationError(f"{descriptor.key} duplicate adventure event id '{event_id}'")
+            seen.add(event_id)
+
+            if not event.get("name"):
+                raise ValidationError(f"{descriptor.key} adventure event '{event_id}' missing 'name'")
+            if not event.get("description"):
+                raise ValidationError(
+                    f"{descriptor.key} adventure event '{event_id}' missing 'description'"
+                )
+
+            absolute_date = event.get("date")
+            day_offset = event.get("day_offset")
+            if absolute_date:
+                parse_iso_date(
+                    str(absolute_date),
+                    field_name=f"{descriptor.key} event '{event_id}' date",
+                )
+                continue
+
+            if day_offset is None:
+                raise ValidationError(
+                    f"{descriptor.key} event '{event_id}' requires 'day_offset' when 'date' is not set"
+                )
+            try:
+                offset = int(day_offset)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    f"{descriptor.key} event '{event_id}' has invalid day_offset '{day_offset}'"
+                ) from exc
+            if offset < 0:
+                raise ValidationError(
+                    f"{descriptor.key} event '{event_id}' day_offset must be >= 0"
+                )

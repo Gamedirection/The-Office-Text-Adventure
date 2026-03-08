@@ -1,0 +1,10 @@
+# Shared world holiday calendar.
+holidays:
+  - id: office_foundation_day
+    name: "Office Foundation Day"
+    date: "2026-01-15"
+    description: "Company anniversary celebration."
+  - id: learning_day
+    name: "Learning Day"
+    date: "2026-05-14"
+    description: "Dedicated day for workshops and internal training."

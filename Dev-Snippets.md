@@ -29,3 +29,14 @@ inspect qa_riley favorability
 settings autosave on
 settings autosave-notify off
 ```
+
+## Calendar settings + weather checks
+
+```text
+settings calendar
+settings calendar timezone UTC
+settings calendar seed randomize
+settings calendar timetravel 2026-12-24
+calendar week weather
+calendar day journal
+```

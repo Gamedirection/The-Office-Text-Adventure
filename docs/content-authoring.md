@@ -18,6 +18,45 @@
 - `adventures/<creator>/<adventure_name>/manifest.yaml`
 - `adventures/<creator>/<adventure_name>/code/story.yaml`
 
+## Adventure timeline events (`story.yaml`)
+
+Add optional top-level `events: []` in story files.
+
+Relative event (default style):
+
+- `day_offset`: integer days from the adventure start date.
+
+Absolute event (explicit date):
+
+- `date`: `YYYY-MM-DD` (use this only when event must happen on a specific day).
+
+Required fields for both:
+
+- `id` (lowercase/underscore)
+- `name`
+- `description`
+
+## Global calendar content (shared world)
+
+- `world/events/*.yaml` with top-level `events: []`
+- `world/calendar/*.yaml` with top-level `holidays: []`
+
+Event schema:
+
+- `id` (lowercase/underscore)
+- `name`
+- `start_date` (`YYYY-MM-DD`)
+- `end_date` (`YYYY-MM-DD`, optional; defaults to start date)
+- `description`
+- `tags` (optional list)
+
+Holiday schema:
+
+- `id` (lowercase/underscore)
+- `name`
+- `date` (`YYYY-MM-DD`)
+- `description` (optional)
+
 ## Choice templates
 
 Optional choice keys:

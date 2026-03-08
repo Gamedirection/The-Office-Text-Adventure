@@ -1,6 +1,8 @@
 ﻿from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 from unittest.mock import patch
 
 import yaml
@@ -314,5 +316,181 @@ def test_inspect_npc_help_and_vibe_check_shows_favorability(tmp_path: Path) -> N
     assert "Favorability for 'Owen (IT)': 3" in visible
 
     locked_stats_with_favorability = engine.execute_command("stats npc it_owen")
-    assert "are locked" in locked_stats_with_favorability
+    assert "still locked" in locked_stats_with_favorability
     assert "Favorability: 3" in locked_stats_with_favorability
+
+
+def test_calendar_commands_and_deterministic_weather(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+    config_dir = player_root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "player.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "calendar_timezone": "UTC",
+                "calendar_seed": 42,
+                "new_game_start_date": "2026-03-07",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    engine = GameEngine(player_root=player_root)
+    engine.start(_key_for_creator("alex"))
+
+    month = engine.execute_command("calendar month")
+    assert "Calendar Month: March 2026" in month
+
+    month_weather = engine.execute_command("calendar month weather")
+    assert "Calendar Month Weather (emoji): March 2026" in month_weather
+    assert "Mo Tu We Th Fr Sa Su" in month_weather
+    assert "Sunny" not in month_weather
+    assert "Rain" not in month_weather
+
+    week = engine.execute_command("calendar week")
+    assert "Calendar Week:" in week
+
+    day = engine.execute_command("calendar day")
+    assert "Calendar Day: 2026-03-07" in day
+    assert "Moon Phase:" in day
+
+    day_weather_a = engine.execute_command("calendar day weather")
+    day_weather_b = engine.execute_command("calendar day weather")
+    assert day_weather_a == day_weather_b
+
+
+def test_calendar_seed_change_updates_forecast(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+    config_dir = player_root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "player.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "calendar_timezone": "UTC",
+                "calendar_seed": 100,
+                "new_game_start_date": "2026-03-07",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    engine = GameEngine(player_root=player_root)
+    engine.start(_key_for_creator("alex"))
+    before_seed = int(engine.state.flags["calendar"]["seed"])
+    current_date = datetime.fromisoformat(engine.state.flags["calendar"]["current_date"]).date()
+
+    changed = engine.execute_command("settings calendar seed 101")
+    assert "Calendar seed set to 101" in changed
+    after_seed = int(engine.state.flags["calendar"]["seed"])
+    assert before_seed != after_seed
+
+    # Compare a rolling window and ensure seeded forecast changes on at least one day.
+    changed_found = False
+    for offset in range(0, 14):
+        test_date = current_date + timedelta(days=offset)
+        engine.state.flags["calendar"]["current_date"] = test_date.isoformat()
+        engine.execute_command("settings calendar seed 100")
+        old_view = engine.execute_command("calendar day weather")
+        engine.execute_command("settings calendar seed 101")
+        new_view = engine.execute_command("calendar day weather")
+        if old_view != new_view:
+            changed_found = True
+            break
+    assert changed_found is True
+
+
+def test_calendar_timetravel_applies_only_to_next_new_game(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+    engine = GameEngine(player_root=player_root)
+    engine.start(_key_for_creator("alex"))
+    current_before = engine.state.flags["calendar"]["current_date"]
+
+    set_tt = engine.execute_command("settings calendar timetravel 2026-12-24")
+    assert "next new game set to 2026-12-24" in set_tt
+    assert engine.state.flags["calendar"]["current_date"] == current_before
+
+    engine2 = GameEngine(player_root=player_root)
+    engine2.start(_key_for_creator("jon"))
+    assert engine2.state.flags["calendar"]["current_date"] == "2026-12-24"
+
+    cfg = engine2.saves.read_player_config()
+    assert "new_game_start_date" not in cfg
+
+
+def test_calendar_day_journal_and_world_change_log(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+    config_dir = player_root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    today_utc = datetime.now(timezone.utc).date().isoformat()
+    (config_dir / "player.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "calendar_timezone": "UTC",
+                "calendar_seed": 7,
+                "new_game_start_date": today_utc,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    engine = GameEngine(player_root=player_root)
+    engine.start(_key_for_creator("dylon"))
+    engine.execute_command("journal add Check release dependencies.")
+
+    day_journal = engine.execute_command("calendar day journal")
+    assert "Journal entries for" in day_journal
+    assert "Check release dependencies." in day_journal
+
+    engine.execute_command("settings calendar seed randomize")
+    changes = engine.execute_command("calendar changes")
+    assert "Global world change log:" in changes
+    assert "calendar_seed_updated" in changes
+
+
+def test_calendar_month_color_priority_and_relative_adventure_event(tmp_path: Path) -> None:
+    player_root = tmp_path / ".player"
+    config_dir = player_root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "player.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "calendar_timezone": "UTC",
+                "calendar_seed": 777,
+                "new_game_start_date": "2026-03-07",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    engine = GameEngine(player_root=player_root)
+    engine.start(_key_for_creator("alex"))
+    engine.adventure.events.append(
+        {
+            "id": "janet_new_car",
+            "name": "Janet got a new car",
+            "day_offset": 0,
+            "description": "Janet shares her new car during lunch.",
+        }
+    )
+    engine.execute_command("journal add Day-zero notes")
+
+    month_view = engine.execute_command("calendar month")
+    assert "Legend:" in month_view
+    assert re.search(r"\[yellow\]\s*7\[/yellow\]", month_view) is not None
+
+    # Relative event appears 5 days after start if day_offset=5.
+    engine.adventure.events.append(
+        {
+            "id": "car_followup",
+            "name": "Janet car follow-up",
+            "day_offset": 5,
+            "description": "Team follow-up chat about commute options.",
+        }
+    )
+    engine.state.flags["calendar"]["current_date"] = "2026-03-12"
+    day_view = engine.execute_command("calendar day")
+    assert "Janet car follow-up" in day_view

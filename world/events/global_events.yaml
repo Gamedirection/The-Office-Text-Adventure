@@ -1,0 +1,14 @@
+# Shared global office events.
+events:
+  - id: sprint_planning_week
+    name: "Sprint Planning Week"
+    start_date: "2026-03-02"
+    end_date: "2026-03-06"
+    description: "Cross-team planning sessions and backlog grooming."
+    tags: [planning, sprint]
+  - id: release_freeze_window
+    name: "Release Freeze Window"
+    start_date: "2026-03-23"
+    end_date: "2026-03-27"
+    description: "Production release freeze for quarterly audit."
+    tags: [release, compliance]

@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import calendar as pycalendar
+from datetime import date, datetime, timedelta, timezone
 import os
 from pathlib import Path
 import random
 from typing import Any
 
 from engine.ai import AIAdapter, MockAIAdapter
+from engine.calendar import (
+    date_range,
+    deterministic_seed_from_text,
+    events_for_day,
+    parse_iso_date,
+    timezone_for_name,
+    today_for_timezone,
+    to_utc_timestamp,
+    validate_timezone,
+    weather_for_date,
+    week_start,
+)
 from engine.exceptions import EngineError, ValidationError
 from engine.loader import ContentLoader, LoadedAdventure
 from engine.save_manager import SaveManager
@@ -102,6 +115,7 @@ class GameEngine:
                 "player_name": self._load_player_name(),
                 "npc_memories": {},
                 "npc_stats_unlocked": self._default_npc_stats_unlocks(),
+                "calendar": self._initialize_calendar_state(),
             },
             last_output="Adventure started.",
         )
@@ -145,6 +159,7 @@ class GameEngine:
             "notes": self._cmd_journal,
             "stats": self._cmd_stats,
             "check": self._cmd_check,
+            "calendar": self._cmd_calendar,
             "name": self._cmd_name,
             "settings": self._cmd_settings,
         }
@@ -172,6 +187,7 @@ class GameEngine:
             raise ValidationError("Cannot load save: adventure no longer available.")
         self.adventure = self.loader.load_adventure(descriptor, self.world)
         self.state = loaded_state
+        self._ensure_calendar_state()
         return self.render_node(prefix=f"Loaded save slot '{slot}'.")
 
     def load_last_session(self) -> str:
@@ -226,6 +242,7 @@ class GameEngine:
             "\n=== Player ===\n"
             "- inventory\n"
             "- journal [list|read <page>|remove <page>|add <note text>]\n"
+            "- calendar [month|week|day] [weather|journal]\n"
             "- stats [npc <npc_id>]\n"
             "- check <intelligence|vibes|physique|luck> [description]\n"
             "- name [new player name]\n"
@@ -235,6 +252,10 @@ class GameEngine:
             "- saves\n"
             "- settings [autosave on|off]\n"
             "- settings autosave-notify on|off\n"
+            "- settings calendar\n"
+            "- settings calendar timezone <iana_tz>\n"
+            "- settings calendar seed <int|randomize>\n"
+            "- settings calendar timetravel <YYYY-MM-DD|clear>\n"
             "- help"
         )
 
@@ -280,6 +301,10 @@ class GameEngine:
 
         for key, value in (choice.get("set_flags") or {}).items():
             self.state.flags[key] = value
+            self._record_world_change(
+                action="set_flag",
+                details={"flag": str(key), "value": value, "node": self.state.current_node},
+            )
         self._apply_choice_npc_stat_unlocks(choice)
 
         check_cfg = choice.get("check") or {}
@@ -662,6 +687,61 @@ class GameEngine:
         outcome = self._run_stat_check(stat_name, description, self._player_stats())
         return outcome["message"]
 
+    def _cmd_calendar(self, args: list[str]) -> str:
+        state = self._calendar_state()
+        target = parse_iso_date(state["current_date"], field_name="calendar.current_date")
+        seed = int(state["seed"])
+
+        if not args:
+            return (
+                "Usage: calendar [month|week|day|changes] [weather|journal]\n"
+                "Examples:\n"
+                "- calendar month\n"
+                "- calendar month weather\n"
+                "- calendar week\n"
+                "- calendar week weather\n"
+                "- calendar day\n"
+                "- calendar day weather\n"
+                "- calendar day journal\n"
+                "- calendar changes"
+            )
+
+        section = args[0].lower()
+        mode = args[1].lower() if len(args) > 1 else ""
+
+        if section == "changes":
+            entries = state.get("world_change_log", [])
+            if not isinstance(entries, list) or not entries:
+                return "No recorded global world changes yet."
+            lines = ["Global world change log:"]
+            for entry in entries[-20:]:
+                if not isinstance(entry, dict):
+                    continue
+                when = str(entry.get("timestamp", ""))
+                action = str(entry.get("action", "unknown"))
+                details = entry.get("details", {})
+                lines.append(f"- {when} | {action} | {details}")
+            return "\n".join(lines)
+
+        if section == "month":
+            if mode == "weather":
+                return self._calendar_month_weather(seed, target)
+            return self._calendar_month_summary(target)
+
+        if section == "week":
+            if mode == "weather":
+                return self._calendar_week_weather(seed, target)
+            return self._calendar_week_summary(target)
+
+        if section == "day":
+            if mode == "weather":
+                return self._calendar_day_weather(seed, target)
+            if mode == "journal":
+                return self._calendar_day_journal(target)
+            return self._calendar_day_summary(seed, target)
+
+        return "Unknown calendar command. Use: calendar [month|week|day|changes] [weather|journal]"
+
     def _cmd_name(self, args: list[str]) -> str:
         if not args:
             return f"Player name: {self._player_name()}"
@@ -685,7 +765,7 @@ class GameEngine:
                 f"- autosave: {autosave}\n"
                 f"- autosave-notify: {autosave_notify}\n"
                 f"- autosave_slot: {slot}\n"
-                "Usage: settings autosave on|off | settings autosave-notify on|off"
+                "Usage: settings autosave on|off | settings autosave-notify on|off | settings calendar"
             )
 
         if len(args) == 2 and args[0].lower() == "autosave":
@@ -708,7 +788,86 @@ class GameEngine:
             state = "enabled" if enabled else "disabled"
             return f"Autosave notification {state}."
 
-        return "Unknown settings command. Usage: settings autosave on|off | settings autosave-notify on|off"
+        if args[0].lower() == "calendar":
+            calendar_state = self._calendar_state()
+            if len(args) == 1:
+                pending = str(config.get("new_game_start_date", "none"))
+                return (
+                    "Calendar Settings:\n"
+                    f"- timezone: {calendar_state['timezone']}\n"
+                    f"- current_date: {calendar_state['current_date']}\n"
+                    f"- seed: {calendar_state['seed']}\n"
+                    f"- next_new_game_date_override: {pending}\n"
+                    "Usage: settings calendar timezone <iana_tz> | "
+                    "settings calendar seed <int|randomize> | "
+                    "settings calendar timetravel <YYYY-MM-DD|clear>"
+                )
+
+            sub = args[1].lower() if len(args) > 1 else ""
+            if sub == "timezone":
+                if len(args) != 3:
+                    return "Usage: settings calendar timezone <iana_tz>"
+                tz_name = args[2]
+                try:
+                    validate_timezone(tz_name)
+                except ValidationError as exc:
+                    return str(exc)
+                config["calendar_timezone"] = tz_name
+                self.saves.write_player_config(config)
+                calendar_state["timezone"] = tz_name
+                self._record_world_change("calendar_timezone_updated", {"timezone": tz_name})
+                return (
+                    f"Calendar timezone set to {tz_name}. "
+                    "Current character date remains unchanged."
+                )
+
+            if sub == "seed":
+                if len(args) != 3:
+                    return "Usage: settings calendar seed <int|randomize>"
+                raw = args[2].lower()
+                if raw == "randomize":
+                    new_seed = random.randint(1, 2_147_483_647)
+                else:
+                    try:
+                        new_seed = int(raw)
+                    except ValueError:
+                        return "Usage: settings calendar seed <int|randomize>"
+                config["calendar_seed"] = int(new_seed)
+                self.saves.write_player_config(config)
+                calendar_state["seed"] = int(new_seed)
+                self._record_world_change("calendar_seed_updated", {"seed": int(new_seed)})
+                return f"Calendar seed set to {new_seed}."
+
+            if sub == "timetravel":
+                if len(args) != 3:
+                    return "Usage: settings calendar timetravel <YYYY-MM-DD|clear>"
+                target = args[2].lower()
+                if target == "clear":
+                    config.pop("new_game_start_date", None)
+                    self.saves.write_player_config(config)
+                    return "New-game time travel override cleared."
+                try:
+                    parse_iso_date(args[2], field_name="timetravel date")
+                except ValidationError as exc:
+                    return str(exc)
+                config["new_game_start_date"] = args[2]
+                self.saves.write_player_config(config)
+                return (
+                    f"Time travel date for next new game set to {args[2]}. "
+                    "This does not change your current character timeline."
+                )
+
+            return (
+                "Unknown calendar settings command. "
+                "Usage: settings calendar timezone <iana_tz> | "
+                "settings calendar seed <int|randomize> | "
+                "settings calendar timetravel <YYYY-MM-DD|clear>"
+            )
+
+        return (
+            "Unknown settings command. Usage: settings autosave on|off | "
+            "settings autosave-notify on|off | settings calendar"
+        )
 
     def _ai_reply(
         self,
@@ -755,6 +914,266 @@ class GameEngine:
     def _load_player_name(self) -> str:
         config = self.saves.read_player_config()
         return str(config.get("player_name", "Player"))
+
+    def _default_calendar_seed(self) -> int:
+        username = os.environ.get("USERNAME", "player")
+        return deterministic_seed_from_text(username)
+
+    def _initialize_calendar_state(self) -> dict[str, Any]:
+        config = self.saves.read_player_config()
+        timezone_name = str(config.get("calendar_timezone", "UTC"))
+        try:
+            validate_timezone(timezone_name)
+        except ValidationError:
+            timezone_name = "UTC"
+
+        seed = config.get("calendar_seed")
+        if seed is None:
+            seed = self._default_calendar_seed()
+            config["calendar_seed"] = int(seed)
+        try:
+            seed_int = int(seed)
+        except (TypeError, ValueError):
+            seed_int = self._default_calendar_seed()
+            config["calendar_seed"] = int(seed_int)
+
+        override_date = config.get("new_game_start_date")
+        if override_date:
+            try:
+                start_date = parse_iso_date(str(override_date), field_name="new_game_start_date")
+                config.pop("new_game_start_date", None)
+                self.saves.write_player_config(config)
+            except ValidationError:
+                start_date = today_for_timezone(timezone_name)
+        else:
+            self.saves.write_player_config(config)
+            start_date = today_for_timezone(timezone_name)
+
+        return {
+            "current_date": start_date.isoformat(),
+            "adventure_start_date": start_date.isoformat(),
+            "timezone": timezone_name,
+            "seed": int(seed_int),
+            "world_change_log": [],
+        }
+
+    def _ensure_calendar_state(self) -> None:
+        calendar_state = self.state.flags.get("calendar")
+        if not isinstance(calendar_state, dict):
+            self.state.flags["calendar"] = self._initialize_calendar_state()
+            return
+        calendar_state.setdefault("current_date", today_for_timezone("UTC").isoformat())
+        calendar_state.setdefault("adventure_start_date", calendar_state["current_date"])
+        calendar_state.setdefault("timezone", "UTC")
+        calendar_state.setdefault("seed", self._default_calendar_seed())
+        calendar_state.setdefault("world_change_log", [])
+        try:
+            validate_timezone(str(calendar_state["timezone"]))
+        except ValidationError:
+            calendar_state["timezone"] = "UTC"
+        calendar_state["seed"] = int(calendar_state["seed"])
+        try:
+            parse_iso_date(str(calendar_state["current_date"]), field_name="calendar.current_date")
+        except ValidationError:
+            calendar_state["current_date"] = today_for_timezone(str(calendar_state["timezone"])).isoformat()
+        try:
+            parse_iso_date(
+                str(calendar_state["adventure_start_date"]),
+                field_name="calendar.adventure_start_date",
+            )
+        except ValidationError:
+            calendar_state["adventure_start_date"] = calendar_state["current_date"]
+
+    def _calendar_state(self) -> dict[str, Any]:
+        self._ensure_calendar_state()
+        calendar_state = self.state.flags.get("calendar")
+        if isinstance(calendar_state, dict):
+            return calendar_state
+        fallback = self._initialize_calendar_state()
+        self.state.flags["calendar"] = fallback
+        return fallback
+
+    def _record_world_change(self, action: str, details: dict[str, Any]) -> None:
+        calendar_state = self._calendar_state()
+        log = calendar_state.setdefault("world_change_log", [])
+        if not isinstance(log, list):
+            log = []
+            calendar_state["world_change_log"] = log
+        log.append(
+            {
+                "timestamp": to_utc_timestamp(),
+                "action": action,
+                "details": details,
+            }
+        )
+
+    def _calendar_month_summary(self, target: date) -> str:
+        cal = pycalendar.Calendar(firstweekday=0)
+        matrix = cal.monthdayscalendar(target.year, target.month)
+        lines = [f"Calendar Month: {target.strftime('%B %Y')}"]
+        lines.append("Mo Tu We Th Fr Sa Su")
+        for week in matrix:
+            tokens: list[str] = []
+            for day in week:
+                if day == 0:
+                    tokens.append("  ")
+                    continue
+                day_date = date(target.year, target.month, day)
+                tag = self._calendar_day_priority_color_tag(day_date)
+                rendered = f"{day:2d}"
+                if tag:
+                    rendered = f"[{tag}]{rendered}[/{tag}]"
+                tokens.append(rendered)
+            lines.append(" ".join(tokens))
+        lines.append("Legend: [yellow]Adventure[/yellow], [blue]Global[/blue], [green]Journal[/green]")
+        return "\n".join(lines)
+
+    def _calendar_month_weather(self, seed: int, target: date) -> str:
+        cal = pycalendar.Calendar(firstweekday=0)
+        matrix = cal.monthdayscalendar(target.year, target.month)
+        lines = [f"Calendar Month Weather (emoji): {target.strftime('%B %Y')}"]
+        lines.append("Mo Tu We Th Fr Sa Su")
+        for week in matrix:
+            tokens: list[str] = []
+            for day in week:
+                if day == 0:
+                    tokens.append("  ")
+                    continue
+                day_date = date(target.year, target.month, day)
+                tokens.append(weather_for_date(seed, day_date).emoji)
+            lines.append(" ".join(tokens))
+        return "\n".join(lines)
+
+    def _calendar_week_summary(self, target: date) -> str:
+        start = week_start(target)
+        days = date_range(start, 7)
+        lines = [f"Calendar Week: {start.isoformat()} to {(start + timedelta(days=6)).isoformat()}"]
+        for day in days:
+            combined = self._all_events_for_day(day)
+            if combined:
+                descriptions = "; ".join(
+                    f"{row.get('name')}: {row.get('description', '')}" for row in combined
+                )
+                lines.append(f"- {day.isoformat()} ({day.strftime('%a')}): {descriptions}")
+            else:
+                lines.append(f"- {day.isoformat()} ({day.strftime('%a')}): no events")
+        return "\n".join(lines)
+
+    def _calendar_week_weather(self, seed: int, target: date) -> str:
+        start = week_start(target)
+        lines = [f"Week Weather: {start.isoformat()} to {(start + timedelta(days=6)).isoformat()}"]
+        for day in date_range(start, 7):
+            weather = weather_for_date(seed, day)
+            lines.append(
+                f"- {day.isoformat()} ({day.strftime('%a')}): {weather.emoji} {weather.weather_type} | Moon: {weather.moon_phase}"
+            )
+        return "\n".join(lines)
+
+    def _calendar_day_summary(self, seed: int, target: date) -> str:
+        weather = weather_for_date(seed, target)
+        lines = [f"Calendar Day: {target.isoformat()} ({target.strftime('%A')})"]
+        lines.append(f"- Moon Phase: {weather.moon_phase}")
+        events = events_for_day(self.world, target)
+        adventure_events = self._adventure_events_for_day(target)
+        events = adventure_events + events
+        if not events:
+            lines.append("- Events: none")
+        else:
+            lines.append("- Events:")
+            for event in events:
+                lines.append(f"  - {event.get('name')}: {event.get('description', '')}")
+        return "\n".join(lines)
+
+    def _calendar_day_weather(self, seed: int, target: date) -> str:
+        weather = weather_for_date(seed, target)
+        return (
+            f"Day Weather: {target.isoformat()} ({target.strftime('%A')})\n"
+            f"- Forecast: {weather.emoji} {weather.weather_type}\n"
+            f"- Moon Phase: {weather.moon_phase}"
+        )
+
+    def _calendar_day_journal(self, target: date) -> str:
+        state = self._calendar_state()
+        timezone_name = str(state.get("timezone", "UTC"))
+        tz = timezone_for_name(timezone_name)
+        pages = self.saves.list_journal_pages(self.state.creator, self.state.adventure_id)
+        filtered: list[dict[str, Any]] = []
+        for page in pages:
+            created_raw = page.get("created_at")
+            if not created_raw:
+                continue
+            try:
+                created_dt = datetime.fromisoformat(str(created_raw))
+            except ValueError:
+                continue
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            local_date = created_dt.astimezone(tz).date()
+            if local_date == target:
+                filtered.append(page)
+
+        if not filtered:
+            return f"No journal entries on {target.isoformat()}."
+
+        lines = [f"Journal entries for {target.isoformat()}:"]
+        for page in filtered:
+            lines.append(f"- Page {page.get('page')}: {page.get('text', '')}")
+        return "\n".join(lines)
+
+    def _adventure_events_for_day(self, target: date) -> list[dict[str, Any]]:
+        if not self.adventure:
+            return []
+        calendar_state = self._calendar_state()
+        start_date = parse_iso_date(
+            str(calendar_state.get("adventure_start_date")),
+            field_name="calendar.adventure_start_date",
+        )
+        day_events: list[dict[str, Any]] = []
+        for event in self.adventure.events:
+            if not isinstance(event, dict):
+                continue
+            absolute = event.get("date")
+            if absolute:
+                event_date = parse_iso_date(str(absolute), field_name="adventure event date")
+            else:
+                offset = int(event.get("day_offset", 0))
+                event_date = start_date + timedelta(days=offset)
+            if event_date == target:
+                row = dict(event)
+                row["source"] = "adventure"
+                day_events.append(row)
+        return day_events
+
+    def _all_events_for_day(self, target: date) -> list[dict[str, Any]]:
+        return self._adventure_events_for_day(target) + events_for_day(self.world, target)
+
+    def _journal_dates(self) -> set[date]:
+        state = self._calendar_state()
+        timezone_name = str(state.get("timezone", "UTC"))
+        tz = timezone_for_name(timezone_name)
+        pages = self.saves.list_journal_pages(self.state.creator, self.state.adventure_id)
+        result: set[date] = set()
+        for page in pages:
+            created_raw = page.get("created_at")
+            if not created_raw:
+                continue
+            try:
+                created_dt = datetime.fromisoformat(str(created_raw))
+            except ValueError:
+                continue
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            result.add(created_dt.astimezone(tz).date())
+        return result
+
+    def _calendar_day_priority_color_tag(self, target: date) -> str:
+        if self._adventure_events_for_day(target):
+            return "yellow"
+        if events_for_day(self.world, target):
+            return "blue"
+        if target in self._journal_dates():
+            return "green"
+        return ""
 
     def _default_npc_stats_unlocks(self) -> dict[str, bool]:
         return {npc_id: False for npc_id in self.world.get("npcs", {}).keys()}

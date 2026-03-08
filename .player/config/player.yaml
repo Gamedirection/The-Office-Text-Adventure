@@ -14,3 +14,5 @@ last_session:
   adventure_id: release-day
   slot: autosave
 gui_theme: Dark
+calendar_timezone: UTC
+calendar_seed: 123456

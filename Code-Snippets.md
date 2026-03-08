@@ -14,6 +14,28 @@ locations:
       - dev_bay
 ```
 
+## Add a shared global event (`world/events/*.yaml`)
+
+```yaml
+events:
+  - id: incident_response_week
+    name: "Incident Response Week"
+    start_date: "2026-06-01"
+    end_date: "2026-06-05"
+    description: "Focused triage and reliability hardening."
+    tags: [ops, reliability]
+```
+
+## Add a shared holiday (`world/calendar/*.yaml`)
+
+```yaml
+holidays:
+  - id: innovation_day
+    name: "Innovation Day"
+    date: "2026-09-18"
+    description: "Dedicated team experimentation day."
+```
+
 ## Add a shared NPC with AI fallback + profile context
 
 ```yaml
@@ -72,6 +94,16 @@ content:
 ## Add a story node with choices
 
 ```yaml
+events:
+  - id: janet_new_car
+    name: "Janet got a new car"
+    day_offset: 5
+    description: "Happens 5 days after the adventure starts."
+  - id: quarter_kickoff
+    name: "Quarter Kickoff"
+    date: "2026-04-01"
+    description: "Absolute-date event for a fixed world day."
+
 nodes:
   intro:
     location_id: lobby
@@ -160,4 +192,10 @@ print(engine.execute_command("stats"))
 print(engine.execute_command("check vibes qa_riley Pitch update clearly in standup"))
 print(engine.execute_command("inspect qa_riley favorability"))
 print(engine.execute_command("name Alex"))
+print(engine.execute_command("calendar day"))
+print(engine.execute_command("calendar day weather"))
+print(engine.execute_command("settings calendar"))
+print(engine.execute_command("settings calendar timezone America/New_York"))
+print(engine.execute_command("settings calendar seed randomize"))
+print(engine.execute_command("settings calendar timetravel 2026-12-24"))
 ```

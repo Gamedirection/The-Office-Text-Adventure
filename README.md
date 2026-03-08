@@ -14,7 +14,7 @@ A collaboration-first template for building office-themed text adventures.
 ## Project Layout
 
 - `engine/`: scanner, loader/validation, command execution, save manager, AI adapter interfaces.
-- `world/`: shared office content YAML (`locations`, `items`, `npcs`, `objects`).
+- `world/`: shared office content YAML (`locations`, `items`, `npcs`, `objects`, `events`, `calendar`).
 - `adventures/`: per-creator adventures scanned automatically.
 - `ui/tui/`: plain stdin/stdout interface for Linux terminal + Windows cmd compatibility.
 - `ui/gui/`: PySide6 desktop interface (PyCharm-friendly).
@@ -86,6 +86,7 @@ GUI preferences are saved in player config for theme (`Light`/`Dark`).
 
 - `inventory`
 - `journal [list|read <page>|remove <page>|add <note text>]` (alias: `notes`)
+- `calendar [month|week|day|changes] [weather|journal]`
 - `stats [npc <npc_id>]`
 - `check <intelligence|vibes|physique|luck> [description]`
 - `name [new player name]`
@@ -97,6 +98,10 @@ GUI preferences are saved in player config for theme (`Light`/`Dark`).
 - `saves` (or `list-saves`)
 - `settings [autosave on|off]`
 - `settings autosave-notify on|off`
+- `settings calendar`
+- `settings calendar timezone <iana_tz>`
+- `settings calendar seed <int|randomize>`
+- `settings calendar timetravel <YYYY-MM-DD|clear>`
 - `help`
 
 Tip: if you type `choose` with no arguments, the game previews currently available `choose <choice_id>` options.
@@ -108,6 +113,7 @@ If no options exist, the engine returns a default message like `No one to talk t
 - Player config: `.player/config/player.yaml`
 - Save slots: `.player/saves/<creator>/<adventure>/<slot>.yaml`
 - Journal pages: `.player/journal/<creator>/<adventure>.yaml`
+- Shared save exchange folder: `.player/shared-saves/`
 
 ## Autosave Setting
 
@@ -117,9 +123,13 @@ In `.player/config/player.yaml`:
 - `autosave_notify_enabled: true|false`
 - `autosave_slot: <slot_name>`
 - `tui_color_enabled: true|false`
+- `calendar_timezone: UTC|<IANA timezone>`
+- `calendar_seed: <int>`
+- `new_game_start_date: YYYY-MM-DD` (optional one-shot new game override)
 
 Use in-game command `settings autosave on|off` to toggle autosave.
 Use `settings autosave-notify on|off` to show/hide autosave messages.
+Use `settings calendar ...` for timezone/seed/time-travel defaults.
 When enabled, adventure-changing actions (like moving/choosing) update the autosave slot automatically.
 When `tui_color_enabled` is `true`, TUI output uses color coding (People gold, Items blue, Location green, etc.).
 
@@ -130,6 +140,37 @@ TUI color coding default map:
 - Location/header lines: Green
 - Objects lines: Magenta
 - Choices and "Available now" lines: Cyan
+
+## Calendar, Global Events, And Weather
+
+- Calendar date defaults to the real date at adventure start using configured timezone (`UTC` default).
+- Weather is deterministic from `(calendar_seed + date)`, so the same seed/date always gives the same forecast.
+- Moon phase is shown in calendar day/week weather views.
+- Time travel is new-game-only:
+  - `settings calendar timetravel YYYY-MM-DD` sets the date for your next new session.
+  - It does not modify your current character timeline.
+- Global events come from `world/events/*.yaml`.
+- Holidays come from `world/calendar/*.yaml`.
+- Adventure timeline events can be authored in `story.yaml` under `events:`.
+  - Preferred: `day_offset` (days from adventure start date).
+  - Optional absolute override: `date: YYYY-MM-DD`.
+- Month calendar day color priority:
+  - `yellow`: adventure event on that day (highest priority)
+  - `blue`: global event/holiday on that day
+  - `green`: journal entry exists on that day
+
+Calendar command examples:
+
+```text
+calendar month
+calendar month weather
+calendar week
+calendar week weather
+calendar day
+calendar day weather
+calendar day journal
+calendar changes
+```
 
 ## Adventure Text Styling (TUI)
 

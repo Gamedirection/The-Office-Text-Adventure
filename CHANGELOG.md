@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-07
+
+### Added
+
+- Global calendar subsystem with:
+  - `calendar month|week|day`
+  - `calendar ... weather`
+  - `calendar day journal`
+  - `calendar changes`
+- Deterministic seeded weather and moon phase rendering by date.
+- Calendar settings:
+  - `settings calendar`
+  - `settings calendar timezone <iana_tz>`
+  - `settings calendar seed <int|randomize>`
+  - `settings calendar timetravel <YYYY-MM-DD|clear>`
+- New world content folders:
+  - `world/events/*.yaml` (global events)
+  - `world/calendar/*.yaml` (holidays)
+- World change log recording for global flag/calendar mutations.
+- Shared save exchange directory: `.player/shared-saves/`.
+- Adventure timeline events in story files via `events[]` with `day_offset` or absolute `date`.
+
+### Changed
+
+- New sessions now initialize calendar state from real date + configured timezone.
+- `new_game_start_date` is treated as one-shot override and consumed on next new game.
+- TUI/GUI command completion lists now include calendar commands/settings.
+- `calendar month` now color-tags day numbers by priority:
+  - `yellow` adventure events, `blue` global events/holidays, `green` journal days.
+
+### Fixed
+
+- Save load path now normalizes missing/legacy calendar state safely.
+
 ## [0.2.0] - 2026-03-07
 
 ### Added
